@@ -1,54 +1,61 @@
 def drop_temp_tables():
-    return "drop table if exists crossext_pgmcalled, crossext_datcalled, crossext_crosslinks"
+    return "drop table if exists cobolcrossext_pgmcalled, cobolcrossext_datacalled, cobolcrossext_linkagedata, cobolcrossext_crosslinks"
 
-def populate_crossext_pgmcalled():
+def populate_cobolcrossext_pgmcalled():
     return """
-    select distinct split_part(clr.object_fullname,'.',2) as clrpgmname, cle.keynam as clepgmname
-    into crossext_pgmcalled
+    select distinct 
+        split_part(clr.object_fullname,'.',2) as clrpgmname, 
+        cle.object_name as clepgmname, 
+        cle.object_fullname as clepgmfname
+    into cobolcrossext_pgmcalled
     from 
-    cdt_objects clr,
-    ctv_links lnk,
-    keys cle
+        cdt_objects clr,
+        ctv_links lnk,
+        cdt_objects cle
     where 
         clr.object_type_str in ('Cobol Paragraph','Cobol Section')
-    and cle.objtyp=545 --'Cobol Program' 
+    and cle.object_type_str='Cobol Program' 
     and lnk.caller_id=clr.object_id
-    and lnk.called_id=cle.idkey
-    and lnk.link_type_lo=2048 and lnk.link_type_hi=65536 -- Cp links
+    and lnk.called_id=cle.object_id
+    and lnk.link_type_lo=2048 and lnk.link_type_hi=65536
     """
 
-def idx_crossext_pgmcalled_clepgmname():    
-    return "create index crossext_pgmcalled_clepgmname on crossext_pgmcalled(clepgmname)"
-    
-def populate_crossext_datcalled():
+def idx_cobolcrossext_pgmcalled_clepgmname():    
+    return "create index cobolcrossext_pgmcalled_clepgmname on cobolcrossext_pgmcalled(clepgmname)"
+
+def populate_cobolcrossext_linkagedata():    
     return """
-    select pgmcalled.clrpgmname, cledat.object_id as cledatid, cledat.object_name as cledatname
-    into crossext_datcalled
+    select object_id, object_name, split_part(object_fullname,'.',2) as pgmname 
+    into cobolcrossext_linkagedata 
+    from cdt_objects 
+    where object_type_str in ('Cobol Data') and object_fullname like '%.LINKAGE.%' escape ''
+    """
+
+def idx_cobolcrossext_linkagedata_pgmname(): 
+    return "create index cobolcrossext_linkagedata_pgmname on cobolcrossext_linkagedata(pgmname)"
+        
+def populate_cobolcrossext_datacalled():
+    return """
+    select distinct clrpgmname, cledat.object_id as cledatid, cledat.object_name as cledatname
+    into cobolcrossext_datacalled
     from 
-    crossext_pgmcalled pgmcalled,    
-    cdt_objects clrart,
-    acc,
-    cdt_objects cledat
+    cobolcrossext_pgmcalled pgmcalled,    
+    cobolcrossext_linkagedata cledat
     where
-        clrart.object_type_str in ('Cobol Paragraph','Cobol Section')
-    and split_part(clrart.object_fullname,'.',2)=pgmcalled.clepgmname
-    and cledat.object_fullname like '%.LINKAGE.%'
-    and cledat.object_type_str='Cobol Data'
-    and acc.idclr=clrart.object_id
-    and acc.idcle=cledat.object_id
-    and acc.acctyplo & 16777216=16777216 -- Access
+    pgmcalled.clepgmname = cledat.pgmname
+    and exists (select 1 from acc where idcle=cledat.object_id and acctyplo & 16777216=16777216) -- Cobol Data is Accessed 
     """
     
-def idx_crossext_datcalled_3col():    
-    return "create index crossext_datcalled_3col on crossext_datcalled(clrpgmname,cledatname,cledatid)"
+def idx_cobolcrossext_datacalled_3col():    
+    return "create index cobolcrossext_datacalled_3col on cobolcrossext_datacalled(clrpgmname,cledatname,cledatid)"
     
-def populate_crossext_crosslinks():
+def populate_cobolcrossext_crosslinks():
     return """
     select distinct dat1.cledatid as idclr, dat2.cledatid as idcle
-    into crossext_crosslinks
+    into cobolcrossext_crosslinks
     from 
-    crossext_datcalled dat1,
-    crossext_datcalled dat2
+    cobolcrossext_datacalled dat1,
+    cobolcrossext_datacalled dat2
     where
         dat1.clrpgmname=dat2.clrpgmname
     and dat1.cledatname=dat2.cledatname
@@ -56,5 +63,4 @@ def populate_crossext_crosslinks():
     """
 
 def get_sql_nblinks_created():    
-    return "select count(distinct (idclr, idcle)) from crossext_crosslinks"
-
+    return "select count(distinct (idclr, idcle)) from cobolcrossext_crosslinks"
