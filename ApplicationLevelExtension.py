@@ -14,26 +14,30 @@ class ApplicationLevelExtension(ApplicationLevelExtension):
         logging.info('Populating work tables...')
         kb.execute_query(sqlq.drop_temp_tables())        
         logging.info('(1/5)')
-        kb.execute_query(sqlq.populate_crossext_pgmcalled())
+        kb.execute_query(sqlq.populate_cobolcrossext_pgmcalled())
+        kb.execute_query(sqlq.idx_cobolcrossext_pgmcalled_clepgmname())
         logging.info('(2/5)')
-        kb.execute_query(sqlq.idx_crossext_pgmcalled_clepgmname())
+        kb.execute_query(sqlq.populate_cobolcrossext_linkagedata())
+        kb.execute_query(sqlq.idx_cobolcrossext_linkagedata_pgmname())
         logging.info('(3/5)')
-        kb.execute_query(sqlq.populate_crossext_datcalled())
+        kb.execute_query(sqlq.populate_cobolcrossext_datacalled())
+        kb.execute_query(sqlq.idx_cobolcrossext_datacalled_3col())
         logging.info('(4/5)')
-        kb.execute_query(sqlq.idx_crossext_datcalled_3col())
-        logging.info('(5/5)')
-        kb.execute_query(sqlq.populate_crossext_crosslinks())                
+        kb.execute_query(sqlq.populate_cobolcrossext_crosslinks())
+        logging.info('(5/5)')                        
         nblinks_rs=kb.execute_query(sqlq.get_sql_nblinks_created())
         for row in nblinks_rs:
             nblinks=row[0]
         logging.info('***********************************')
-        logging.info('Links about to be created: '+str(nblinks))
+        logging.info('Nb of links to be created: '+str(nblinks))
         logging.info('***********************************')        
         logging.info('Creating links...')
         application.update_cast_knowledge_base("Create links between Cobol Data items", """        
+        delete from CI_LINKS;
+        
         insert into CI_LINKS (CALLER_ID, CALLED_ID, LINK_TYPE, ERROR_ID)        
         select distinct idclr, idcle, 'referLink', 0
-        from crossext_crosslinks
+        from cobolcrossext_crosslinks;
         """)
         logging.info('Done.')
         logging.info('##################################################################')
